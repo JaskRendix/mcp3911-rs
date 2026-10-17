@@ -2,6 +2,8 @@ use modular_bitfield::prelude::*;
 
 pub const CHANNEL_REGISTER_BYTES: usize = 3;
 pub const CONFIG_REGISTER_BYTES: usize = 2;
+pub const STATUS_REGISTER_BYTES: usize = 2;
+pub const PHASE_REGISTER_BYTES: usize = 2;
 pub const VREFCAL_REGISTER_BYTES: usize = 1;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -26,6 +28,29 @@ pub enum Register {
 pub enum Channel {
     Ch0,
     Ch1,
+}
+
+impl Channel {
+    pub const fn data_register(self) -> Register {
+        match self {
+            Channel::Ch0 => Register::Channel0,
+            Channel::Ch1 => Register::Channel1,
+        }
+    }
+
+    pub const fn gaincal_register(self) -> Register {
+        match self {
+            Channel::Ch0 => Register::GainCalCh0,
+            Channel::Ch1 => Register::GainCalCh1,
+        }
+    }
+
+    pub const fn offcal_register(self) -> Register {
+        match self {
+            Channel::Ch0 => Register::OffCalCh0,
+            Channel::Ch1 => Register::OffCalCh1,
+        }
+    }
 }
 
 #[derive(Specifier, Copy, Clone, Debug, PartialEq, Eq)]

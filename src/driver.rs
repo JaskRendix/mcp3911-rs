@@ -2,7 +2,8 @@ use embedded_hal::spi::SpiDevice;
 
 use crate::registers::{
     self, CHANNEL_REGISTER_BYTES, CONFIG_REGISTER_BYTES, Channel, ConfGain, Config, ConfigReg,
-    Gain, Oversampling, Register, StatusReg, VREFCAL_REGISTER_BYTES,
+    Gain, Oversampling, PHASE_REGISTER_BYTES, Register, STATUS_REGISTER_BYTES, StatusReg,
+    VREFCAL_REGISTER_BYTES,
 };
 
 // --- Constants ---
@@ -91,12 +92,7 @@ where
 
     /// Read a raw 24-bit sample from any given channel
     pub fn read_raw(&mut self, channel: Channel) -> Result<i32, Error<E>> {
-        let reg = match channel {
-            Channel::Ch0 => Register::Channel0,
-            Channel::Ch1 => Register::Channel1,
-        };
-
-        self.read_i24_register(reg)
+        self.read_i24_register(channel.data_register())
     }
 
     /// Convenience wrapper for Channel 0 raw read
@@ -185,30 +181,15 @@ where
     }
 
     pub fn read_gain_calibration(&mut self, channel: Channel) -> Result<i32, Error<E>> {
-        let reg = match channel {
-            Channel::Ch0 => Register::GainCalCh0,
-            Channel::Ch1 => Register::GainCalCh1,
-        };
-
-        self.read_i24_register(reg)
+        self.read_i24_register(channel.gaincal_register())
     }
 
     pub fn write_gain_calibration(&mut self, channel: Channel, value: i32) -> Result<(), Error<E>> {
-        let reg = match channel {
-            Channel::Ch0 => Register::GainCalCh0,
-            Channel::Ch1 => Register::GainCalCh1,
-        };
-
-        self.write_i24_register(reg, value)
+        self.write_i24_register(channel.gaincal_register(), value)
     }
 
     pub fn read_offset_calibration(&mut self, channel: Channel) -> Result<i32, Error<E>> {
-        let reg = match channel {
-            Channel::Ch0 => Register::OffCalCh0,
-            Channel::Ch1 => Register::OffCalCh1,
-        };
-
-        self.read_i24_register(reg)
+        self.read_i24_register(channel.offcal_register())
     }
 
     pub fn write_offset_calibration(
@@ -216,12 +197,7 @@ where
         channel: Channel,
         value: i32,
     ) -> Result<(), Error<E>> {
-        let reg = match channel {
-            Channel::Ch0 => Register::OffCalCh0,
-            Channel::Ch1 => Register::OffCalCh1,
-        };
-
-        self.write_i24_register(reg, value)
+        self.write_i24_register(channel.offcal_register(), value)
     }
 
     pub fn read_vrefcal(&mut self) -> Result<u8, Error<E>> {
@@ -237,7 +213,7 @@ where
     }
 
     pub fn read_status(&mut self) -> Result<StatusReg, Error<E>> {
-        let mut buf = [0u8; CONFIG_REGISTER_BYTES];
+        let mut buf = [0u8; STATUS_REGISTER_BYTES];
 
         self.read_register(Register::Status, &mut buf)?;
 
@@ -249,7 +225,7 @@ where
     }
 
     pub fn read_phase(&mut self) -> Result<i16, Error<E>> {
-        let mut buf = [0u8; 2];
+        let mut buf = [0u8; PHASE_REGISTER_BYTES];
 
         self.read_register(Register::Phase, &mut buf)?;
 
@@ -278,10 +254,7 @@ where
     SPI: embedded_hal_async::spi::SpiDevice<Error = E>,
 {
     pub async fn read_raw_async(&mut self, channel: Channel) -> Result<i32, Error<E>> {
-        let reg = match channel {
-            Channel::Ch0 => Register::Channel0,
-            Channel::Ch1 => Register::Channel1,
-        };
+        let reg = channel.data_register();
         let mut buf = [0u8; CHANNEL_REGISTER_BYTES];
         let cmd = ((reg as u8) << 1) | READ_BIT;
         self.spi
