@@ -5,7 +5,7 @@ use std::vec;
 use crate::registers::{
     self, Channel, ConfGain, Config, ConfigReg, DrMode, Gain, Oversampling, StatusReg,
 };
-use crate::{raw_to_uv, sign_extend24, to_u24, MCP3911};
+use crate::{MCP3911, raw_to_uv, sign_extend24, to_u24};
 
 #[test]
 fn sign_extension_zero() {

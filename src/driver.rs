@@ -1,8 +1,8 @@
 use embedded_hal::spi::SpiDevice;
 
 use crate::registers::{
-    self, Channel, ConfGain, Config, ConfigReg, Gain, Oversampling, Register, StatusReg,
-    CHANNEL_REGISTER_BYTES, CONFIG_REGISTER_BYTES, VREFCAL_REGISTER_BYTES,
+    self, CHANNEL_REGISTER_BYTES, CONFIG_REGISTER_BYTES, Channel, ConfGain, Config, ConfigReg,
+    Gain, Oversampling, Register, StatusReg, VREFCAL_REGISTER_BYTES,
 };
 
 // --- Constants ---
