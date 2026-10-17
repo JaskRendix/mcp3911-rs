@@ -47,6 +47,11 @@ fn decode_i24(buf: &[u8; CHANNEL_REGISTER_BYTES]) -> i32 {
     sign_extend24(raw)
 }
 
+/// Converts a raw ADC code to microvolts.
+///
+/// Based on MCP3911 Equation 5-3:
+///
+/// DATA = Vin / Vref × PGA × 1.5 × 8,388,608
 pub fn raw_to_uv(raw: i32, gain: Gain, vref_mv: u16) -> i64 {
     let gain_multiplier = gain.multiplier() as i64;
     let numerator = (raw as i64) * (vref_mv as i64) * 1_000;
@@ -90,7 +95,9 @@ where
         self.write_register(reg, &to_u24(value))
     }
 
-    /// Read a raw 24-bit sample from any given channel
+    /// Read a signed 24-bit two's complement ADC sample.
+    ///
+    /// The returned value is sign-extended to `i32`.
     pub fn read_raw(&mut self, channel: Channel) -> Result<i32, Error<E>> {
         self.read_i24_register(channel.data_register())
     }
@@ -105,6 +112,10 @@ where
         self.read_raw(Channel::Ch1)
     }
 
+    /// Convert a raw ADC code into microvolts.
+    ///
+    /// Uses the configured reference voltage supplied to
+    /// [`MCP3911::new`] and the specified PGA gain.
     pub fn counts_to_uv(&self, raw: i32, gain: Gain) -> i64 {
         raw_to_uv(raw, gain, self.vref_mv)
     }
@@ -180,18 +191,32 @@ where
         self.spi
     }
 
+    /// Read the raw GAINCAL register value.
+    ///
+    /// See datasheet section 5.12.2.
     pub fn read_gain_calibration(&mut self, channel: Channel) -> Result<i32, Error<E>> {
         self.read_i24_register(channel.gaincal_register())
     }
 
+    /// Write the raw GAINCAL register value.
+    ///
+    /// This is a signed 24-bit calibration value and
+    /// does not directly
     pub fn write_gain_calibration(&mut self, channel: Channel, value: i32) -> Result<(), Error<E>> {
         self.write_i24_register(channel.gaincal_register(), value)
     }
 
+    /// Read the raw OFFCAL register value.
+    ///
+    /// See datasheet section 5.12.1.
     pub fn read_offset_calibration(&mut self, channel: Channel) -> Result<i32, Error<E>> {
         self.read_i24_register(channel.offcal_register())
     }
 
+    /// Write the raw OFFCAL register value.
+    ///
+    /// The value is stored as a signed 24-bit
+    /// two's complement offset correction.
     pub fn write_offset_calibration(
         &mut self,
         channel: Channel,
@@ -200,6 +225,11 @@ where
         self.write_i24_register(channel.offcal_register(), value)
     }
 
+    /// Read the VREFCAL trim register.
+    ///
+    /// This register adjusts the internal voltage
+    /// reference temperature compensation and is
+    /// intended for advanced calibration use.
     pub fn read_vrefcal(&mut self) -> Result<u8, Error<E>> {
         let mut buf = [0u8; VREFCAL_REGISTER_BYTES];
 
@@ -208,6 +238,11 @@ where
         Ok(buf[0])
     }
 
+    /// Write the VREFCAL trim register.
+    ///
+    /// Warning: modifying this register may affect
+    /// both the reference voltage value and its
+    /// temperature coefficient.
     pub fn write_vrefcal(&mut self, value: u8) -> Result<(), Error<E>> {
         self.write_register(Register::VrefCal, &[value])
     }
@@ -224,6 +259,11 @@ where
         self.write_register(Register::Status, &status.into_bytes())
     }
 
+    /// Read the PHASE register value.
+    ///
+    /// Positive values cause Channel 0 to lag
+    /// Channel 1. Negative values cause Channel 0
+    /// to lead Channel 1.
     pub fn read_phase(&mut self) -> Result<i16, Error<E>> {
         let mut buf = [0u8; PHASE_REGISTER_BYTES];
 
@@ -236,6 +276,13 @@ where
         Ok(phase)
     }
 
+    /// Note:
+    /// According to the MCP3911 datasheet, writing the
+    /// PHASE register automatically resets and restarts
+    /// both ADCs, even if the written value is unchanged.
+    ///
+    /// Rewriting the current PHASE value can therefore be
+    /// used as a software reset for both ADCs.
     pub fn write_phase(&mut self, phase: i16) -> Result<(), Error<E>> {
         if !(-2048..=2047).contains(&phase) {
             return Err(Error::InvalidRegister);
