@@ -39,6 +39,13 @@ pub const fn to_u24(value: i32) -> [u8; 3] {
     ]
 }
 
+#[inline]
+fn decode_i24(buf: &[u8; CHANNEL_REGISTER_BYTES]) -> i32 {
+    let raw = ((buf[0] as u32) << 16) | ((buf[1] as u32) << 8) | (buf[2] as u32);
+
+    sign_extend24(raw)
+}
+
 pub fn raw_to_uv(raw: i32, gain: Gain, vref_mv: u16) -> i64 {
     let gain_multiplier = gain.multiplier() as i64;
     let numerator = (raw as i64) * (vref_mv as i64) * 1_000;
@@ -68,16 +75,28 @@ where
         self.write_register(Register::Config, &config.into_bytes())
     }
 
+    #[inline]
+    fn read_i24_register(&mut self, reg: Register) -> Result<i32, Error<E>> {
+        let mut buf = [0u8; CHANNEL_REGISTER_BYTES];
+
+        self.read_register(reg, &mut buf)?;
+
+        Ok(decode_i24(&buf))
+    }
+
+    #[inline]
+    fn write_i24_register(&mut self, reg: Register, value: i32) -> Result<(), Error<E>> {
+        self.write_register(reg, &to_u24(value))
+    }
+
     /// Read a raw 24-bit sample from any given channel
     pub fn read_raw(&mut self, channel: Channel) -> Result<i32, Error<E>> {
         let reg = match channel {
             Channel::Ch0 => Register::Channel0,
             Channel::Ch1 => Register::Channel1,
         };
-        let mut buf = [0u8; CHANNEL_REGISTER_BYTES];
-        self.read_register(reg, &mut buf)?;
-        let raw_u32 = ((buf[0] as u32) << 16) | ((buf[1] as u32) << 8) | (buf[2] as u32);
-        Ok(sign_extend24(raw_u32))
+
+        self.read_i24_register(reg)
     }
 
     /// Convenience wrapper for Channel 0 raw read
@@ -171,13 +190,7 @@ where
             Channel::Ch1 => Register::GainCalCh1,
         };
 
-        let mut buf = [0u8; CHANNEL_REGISTER_BYTES];
-
-        self.read_register(reg, &mut buf)?;
-
-        let raw = ((buf[0] as u32) << 16) | ((buf[1] as u32) << 8) | (buf[2] as u32);
-
-        Ok(sign_extend24(raw))
+        self.read_i24_register(reg)
     }
 
     pub fn write_gain_calibration(&mut self, channel: Channel, value: i32) -> Result<(), Error<E>> {
@@ -186,7 +199,7 @@ where
             Channel::Ch1 => Register::GainCalCh1,
         };
 
-        self.write_register(reg, &to_u24(value))
+        self.write_i24_register(reg, value)
     }
 
     pub fn read_offset_calibration(&mut self, channel: Channel) -> Result<i32, Error<E>> {
@@ -195,13 +208,7 @@ where
             Channel::Ch1 => Register::OffCalCh1,
         };
 
-        let mut buf = [0u8; CHANNEL_REGISTER_BYTES];
-
-        self.read_register(reg, &mut buf)?;
-
-        let raw = ((buf[0] as u32) << 16) | ((buf[1] as u32) << 8) | (buf[2] as u32);
-
-        Ok(sign_extend24(raw))
+        self.read_i24_register(reg)
     }
 
     pub fn write_offset_calibration(
@@ -214,7 +221,7 @@ where
             Channel::Ch1 => Register::OffCalCh1,
         };
 
-        self.write_register(reg, &to_u24(value))
+        self.write_i24_register(reg, value)
     }
 
     pub fn read_vrefcal(&mut self) -> Result<u8, Error<E>> {
@@ -284,7 +291,6 @@ where
             ])
             .await
             .map_err(Error::Spi)?;
-        let raw_u32 = ((buf[0] as u32) << 16) | ((buf[1] as u32) << 8) | (buf[2] as u32);
-        Ok(sign_extend24(raw_u32))
+        Ok(decode_i24(&buf))
     }
 }
