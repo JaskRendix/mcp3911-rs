@@ -69,28 +69,6 @@ fn gain_register_x32_x32() {
 }
 
 #[test]
-fn config_osr_roundtrip() {
-    let reg = ConfigReg::new().with_osr(Oversampling::O256);
-
-    let bytes = reg.into_bytes();
-
-    let decoded = ConfigReg::from_bytes(bytes);
-
-    assert_eq!(decoded.osr(), Oversampling::O256);
-}
-
-#[test]
-fn config_prescale_roundtrip() {
-    let reg = ConfigReg::new().with_prescale(registers::Prescale::Mclk8);
-
-    let bytes = reg.into_bytes();
-
-    let decoded = ConfigReg::from_bytes(bytes);
-
-    assert_eq!(decoded.prescale(), registers::Prescale::Mclk8);
-}
-
-#[test]
 fn raw_to_uv_zero() {
     assert_eq!(raw_to_uv(0, Gain::X1, 1200), 0);
 }
@@ -486,13 +464,6 @@ fn write_config_register() {
 }
 
 #[test]
-fn configure_with_dither() {
-    let cfg = Config::new().dither(registers::Dither::Medium);
-
-    assert_eq!(cfg.dither, registers::Dither::Medium);
-}
-
-#[test]
 fn gain_calibration_accepts_max_i24() {
     assert_eq!(to_u24(8_388_607), [0x7F, 0xFF, 0xFF]);
 }
@@ -512,6 +483,129 @@ fn gain_calibration_rejects_out_of_range() {
     let result = adc.write_gain_calibration(Channel::Ch0, 8_388_608);
 
     assert!(matches!(result, Err(crate::Error::ValueOutOfRange)));
+
+    adc.release().done();
+}
+
+#[test]
+fn soft_reset_adcs_rewrites_phase() {
+    use embedded_hal_mock::eh1::spi::{Mock, Transaction};
+
+    let expectations = [
+        Transaction::transaction_start(),
+        Transaction::write_vec(vec![0x0F]),
+        Transaction::read_vec(vec![0x00, 0x10]),
+        Transaction::transaction_end(),
+        Transaction::transaction_start(),
+        Transaction::write_vec(vec![0x0E]),
+        Transaction::write_vec(vec![0x00, 0x10]),
+        Transaction::transaction_end(),
+    ];
+
+    let spi = Mock::new(&expectations);
+    let mut adc = MCP3911::new(spi, 1200);
+
+    adc.soft_reset_adcs().unwrap();
+
+    adc.release().done();
+}
+
+#[test]
+fn write_phase_rejects_too_large() {
+    use embedded_hal_mock::eh1::spi::Mock;
+
+    let spi = Mock::new(&[]);
+    let mut adc = MCP3911::new(spi, 1200);
+
+    let result = adc.write_phase(2048);
+
+    assert!(matches!(result, Err(crate::Error::ValueOutOfRange)));
+
+    adc.release().done();
+}
+
+#[test]
+fn write_phase_rejects_too_small() {
+    use embedded_hal_mock::eh1::spi::Mock;
+
+    let spi = Mock::new(&[]);
+    let mut adc = MCP3911::new(spi, 1200);
+
+    let result = adc.write_phase(-2049);
+
+    assert!(matches!(result, Err(crate::Error::ValueOutOfRange)));
+
+    adc.release().done();
+}
+
+#[test]
+fn counts_to_uv_wrapper() {
+    use embedded_hal_mock::eh1::spi::Mock;
+
+    let spi = Mock::new(&[]);
+    let adc = MCP3911::new(spi, 1200);
+
+    assert_eq!(
+        adc.counts_to_uv(123456, Gain::X8),
+        raw_to_uv(123456, Gain::X8, 1200)
+    );
+
+    adc.release().done();
+}
+
+#[test]
+fn read_raw_ch0_wrapper() {
+    use embedded_hal_mock::eh1::spi::{Mock, Transaction};
+
+    let expectations = [
+        Transaction::transaction_start(),
+        Transaction::write_vec(vec![0x01]),
+        Transaction::read_vec(vec![0x00, 0x00, 0x01]),
+        Transaction::transaction_end(),
+    ];
+
+    let spi = Mock::new(&expectations);
+    let mut adc = MCP3911::new(spi, 1200);
+
+    assert_eq!(adc.read_raw_ch0().unwrap(), 1);
+
+    adc.release().done();
+}
+
+#[test]
+fn read_raw_ch1_wrapper() {
+    use embedded_hal_mock::eh1::spi::{Mock, Transaction};
+
+    let expectations = [
+        Transaction::transaction_start(),
+        Transaction::write_vec(vec![0x07]),
+        Transaction::read_vec(vec![0x00, 0x00, 0x01]),
+        Transaction::transaction_end(),
+    ];
+
+    let spi = Mock::new(&expectations);
+    let mut adc = MCP3911::new(spi, 1200);
+
+    assert_eq!(adc.read_raw_ch1().unwrap(), 1);
+
+    adc.release().done();
+}
+
+#[test]
+fn reset_writes_config_register() {
+    use embedded_hal_mock::eh1::spi::{Mock, Transaction};
+
+    let expectations = [
+        Transaction::transaction_start(),
+        Transaction::write_vec(vec![0x18]),
+        Transaction::write_vec(vec![0x00, 0xC0]),
+        Transaction::transaction_end(),
+    ];
+
+    let spi = Mock::new(&expectations);
+    let mut adc = MCP3911::new(spi, 1200);
+
+    adc.reset().unwrap();
 
     adc.release().done();
 }

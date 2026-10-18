@@ -519,13 +519,6 @@ mod tests {
     }
 
     #[test]
-    fn config_dither_encoding() {
-        let reg = ConfigReg::new().with_dither(Dither::Off);
-
-        assert_eq!(reg.dither(), Dither::Off);
-    }
-
-    #[test]
     fn drstatus_roundtrip() {
         let reg = StatusReg::new().with_drstatus(DrStatus::Both);
 

@@ -320,8 +320,32 @@ where
         Ok(ConfigReg::from_bytes(buf))
     }
 
+    /// Writes the CONFIG register.
+    ///
+    /// Note:
+    /// According to the MCP3911 datasheet, modifying
+    /// OSR, PRESCALE, CLKEXT or VREFEXT causes both
+    /// ADCs to reset and automatically restart.
+    /// The first conversion results after such changes
+    /// should be discarded until the SINC filter has
+    /// settled.
     pub fn write_config(&mut self, config: ConfigReg) -> Result<(), Error<E>> {
         self.write_register(Register::Config, &config.into_bytes())
+    }
+
+    /// Soft-reset both ADCs without changing configuration.
+    ///
+    /// According to the MCP3911 datasheet, rewriting the
+    /// PHASE register with its current value resets and
+    /// automatically restarts both ADCs.
+    ///
+    /// This is equivalent to performing a software-triggered
+    /// ADC restart while preserving all configuration
+    /// registers.
+    #[inline]
+    pub fn soft_reset_adcs(&mut self) -> Result<(), Error<E>> {
+        let phase = self.read_phase()?;
+        self.write_phase(phase)
     }
 }
 
