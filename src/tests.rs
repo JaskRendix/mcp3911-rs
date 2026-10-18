@@ -388,3 +388,106 @@ fn phase_sign_extension_minus_one() {
 
     assert_eq!(phase, -1);
 }
+
+#[test]
+fn config_builder_dither() {
+    let cfg = Config::new().dither(registers::Dither::Medium);
+
+    assert_eq!(cfg.dither, registers::Dither::Medium);
+}
+
+#[test]
+fn autozero_roundtrip_enabled() {
+    let reg = ConfigReg::new().with_az_on_hi_speed(registers::AutoZero::Enabled);
+
+    let decoded = ConfigReg::from_bytes(reg.into_bytes());
+
+    assert_eq!(decoded.az_on_hi_speed(), registers::AutoZero::Enabled);
+}
+
+#[test]
+fn autozero_roundtrip_disabled() {
+    let reg = ConfigReg::new().with_az_on_hi_speed(registers::AutoZero::Disabled);
+
+    let decoded = ConfigReg::from_bytes(reg.into_bytes());
+
+    assert_eq!(decoded.az_on_hi_speed(), registers::AutoZero::Disabled);
+}
+
+#[test]
+fn drstatus_ch0_roundtrip() {
+    let reg = StatusReg::new().with_drstatus(registers::DrStatus::Ch0);
+
+    let decoded = StatusReg::from_bytes(reg.into_bytes());
+
+    assert_eq!(decoded.drstatus(), registers::DrStatus::Ch0);
+}
+
+#[test]
+fn modout_roundtrip_channel0() {
+    let reg = StatusReg::new().with_modout(registers::ModulatorOutput::Channel0);
+
+    let decoded = StatusReg::from_bytes(reg.into_bytes());
+
+    assert_eq!(decoded.modout(), registers::ModulatorOutput::Channel0);
+}
+
+#[test]
+fn modout_roundtrip_disabled() {
+    let reg = StatusReg::new().with_modout(registers::ModulatorOutput::Disabled);
+
+    let decoded = StatusReg::from_bytes(reg.into_bytes());
+
+    assert_eq!(decoded.modout(), registers::ModulatorOutput::Disabled);
+}
+
+#[test]
+fn read_config_register() {
+    use embedded_hal_mock::eh1::spi::{Mock, Transaction};
+
+    let expectations = [
+        Transaction::transaction_start(),
+        Transaction::write_vec(vec![0x19]),
+        Transaction::read_vec(vec![0x18, 0x00]),
+        Transaction::transaction_end(),
+    ];
+
+    let spi = Mock::new(&expectations);
+
+    let mut adc = MCP3911::new(spi, 1200);
+
+    let cfg = adc.read_config().unwrap();
+
+    assert_eq!(cfg.osr(), Oversampling::O256);
+
+    adc.release().done();
+}
+
+#[test]
+fn write_config_register() {
+    use embedded_hal_mock::eh1::spi::{Mock, Transaction};
+
+    let reg = ConfigReg::new().with_osr(Oversampling::O256);
+
+    let expectations = [
+        Transaction::transaction_start(),
+        Transaction::write_vec(vec![0x18]),
+        Transaction::write_vec(reg.into_bytes().to_vec()),
+        Transaction::transaction_end(),
+    ];
+
+    let spi = Mock::new(&expectations);
+
+    let mut adc = MCP3911::new(spi, 1200);
+
+    adc.write_config(reg).unwrap();
+
+    adc.release().done();
+}
+
+#[test]
+fn configure_with_dither() {
+    let cfg = Config::new().dither(registers::Dither::Medium);
+
+    assert_eq!(cfg.dither, registers::Dither::Medium);
+}

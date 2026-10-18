@@ -123,8 +123,8 @@ pub struct ConfGain {
 #[bitfield]
 #[derive(Copy, Clone, Debug)]
 pub struct ConfigReg {
-    pub az_on_hi_speed: bool,
-    pub dither: B2,
+    pub az_on_hi_speed: AutoZero,
+    pub dither: Dither,
     pub osr: Oversampling,
     pub prescale: Prescale,
     #[skip]
@@ -169,6 +169,43 @@ pub enum WordWidth {
     Both24 = 3,
 }
 
+#[derive(Specifier, Copy, Clone, Debug, PartialEq, Eq)]
+#[bits = 2]
+pub enum Dither {
+    Off = 0,
+    Low = 1,
+    Medium = 2,
+    High = 3,
+}
+
+#[derive(Specifier, Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
+#[bits = 2]
+pub enum DrStatus {
+    None = 0,
+    Ch0 = 1,
+    Ch1 = 2,
+    Both = 3,
+}
+
+#[derive(Specifier, Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
+#[bits = 1]
+pub enum AutoZero {
+    Disabled = 0,
+    Enabled = 1,
+}
+
+#[derive(Specifier, Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
+#[bits = 2]
+pub enum ModulatorOutput {
+    Channel0 = 0,
+    Channel1 = 1,
+    Shared = 2,
+    Disabled = 3,
+}
+
 #[bitfield]
 #[derive(Copy, Clone, Debug)]
 pub struct StatusReg {
@@ -181,14 +218,14 @@ pub struct StatusReg {
     #[skip]
     _reserved0: B1,
 
-    pub drstatus: B2,
+    pub drstatus: DrStatus,
     pub drmode: DrMode,
     pub dr_hiz: bool,
 
     #[skip]
     _reserved1: B1,
 
-    pub modout: B2,
+    pub modout: ModulatorOutput,
 }
 
 /// Ergonomic configuration builder
@@ -199,6 +236,7 @@ pub struct Config {
     pub boost: Boost,
     pub osr: Oversampling,
     pub prescale: Prescale,
+    pub dither: Dither,
 }
 
 impl Default for Config {
@@ -209,6 +247,7 @@ impl Default for Config {
             boost: Boost::X1,
             osr: Oversampling::O256,
             prescale: Prescale::Mclk1,
+            dither: Dither::High,
         }
     }
 }
@@ -221,6 +260,7 @@ impl Config {
             boost: Boost::X1,
             osr: Oversampling::O256,
             prescale: Prescale::Mclk1,
+            dither: Dither::High,
         }
     }
 
@@ -246,6 +286,11 @@ impl Config {
 
     pub const fn prescale(mut self, prescale: Prescale) -> Self {
         self.prescale = prescale;
+        self
+    }
+
+    pub const fn dither(mut self, dither: Dither) -> Self {
+        self.dither = dither;
         self
     }
 }
@@ -415,5 +460,39 @@ mod tests {
         let decoded = StatusReg::from_bytes(reg.into_bytes());
 
         assert_eq!(decoded.drmode(), DrMode::Both);
+    }
+
+    #[test]
+    fn config_dither_roundtrip() {
+        let reg = ConfigReg::new().with_dither(Dither::High);
+
+        let decoded = ConfigReg::from_bytes(reg.into_bytes());
+
+        assert_eq!(decoded.dither(), Dither::High);
+    }
+
+    #[test]
+    fn config_dither_encoding() {
+        let reg = ConfigReg::new().with_dither(Dither::Off);
+
+        assert_eq!(reg.dither(), Dither::Off);
+    }
+
+    #[test]
+    fn drstatus_roundtrip() {
+        let reg = StatusReg::new().with_drstatus(DrStatus::Both);
+
+        let decoded = StatusReg::from_bytes(reg.into_bytes());
+
+        assert_eq!(decoded.drstatus(), DrStatus::Both);
+    }
+
+    #[test]
+    fn autozero_roundtrip() {
+        let reg = ConfigReg::new().with_az_on_hi_speed(AutoZero::Enabled);
+
+        let decoded = ConfigReg::from_bytes(reg.into_bytes());
+
+        assert_eq!(decoded.az_on_hi_speed(), AutoZero::Enabled);
     }
 }

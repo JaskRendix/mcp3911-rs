@@ -22,7 +22,7 @@ const MCP3911_FULL_SCALE_COUNTS: i64 = 12_582_912;
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Error<SpiError> {
     Spi(SpiError),
-    InvalidRegister,
+    InvalidValue,
 }
 
 /// Standalone helper for 24-bit two's complement sign extension
@@ -123,8 +123,18 @@ where
     /// Apply a full ergonomic configuration bundle
     pub fn configure(&mut self, config: Config) -> Result<(), Error<E>> {
         self.set_gain_and_boost(config.gain_ch0, config.gain_ch1, config.boost)?;
-        self.set_osr_and_prescale(config.osr, config.prescale)?;
-        Ok(())
+
+        let mut buf = [0u8; CONFIG_REGISTER_BYTES];
+
+        self.read_register(Register::Config, &mut buf)?;
+
+        let mut reg = ConfigReg::from_bytes(buf);
+
+        reg.set_osr(config.osr);
+        reg.set_prescale(config.prescale);
+        reg.set_dither(config.dither);
+
+        self.write_register(Register::Config, &reg.into_bytes())
     }
 
     pub fn set_gain_and_boost(
@@ -144,21 +154,22 @@ where
     /// According to the MCP3911 datasheet, modifying
     /// OSR or PRESCALE automatically resets and
     /// restarts both ADCs.
-    pub fn set_osr_and_prescale(
+    pub fn set_config_fields(
         &mut self,
         osr: Oversampling,
         prescale: registers::Prescale,
+        dither: registers::Dither,
     ) -> Result<(), Error<E>> {
-        // Read current CONFIG register contents
         let mut buf = [0u8; CONFIG_REGISTER_BYTES];
+
         self.read_register(Register::Config, &mut buf)?;
 
-        // Modify only the requested fields
         let mut config = ConfigReg::from_bytes(buf);
+
         config.set_osr(osr);
         config.set_prescale(prescale);
+        config.set_dither(dither);
 
-        // Preserve all other bits
         self.write_register(Register::Config, &config.into_bytes())
     }
 
@@ -285,12 +296,24 @@ where
     /// used as a software reset for both ADCs.
     pub fn write_phase(&mut self, phase: i16) -> Result<(), Error<E>> {
         if !(-2048..=2047).contains(&phase) {
-            return Err(Error::InvalidRegister);
+            return Err(Error::InvalidValue);
         }
 
         let raw = (phase as u16) & 0x0FFF;
 
         self.write_register(Register::Phase, &raw.to_be_bytes())
+    }
+
+    pub fn read_config(&mut self) -> Result<ConfigReg, Error<E>> {
+        let mut buf = [0u8; CONFIG_REGISTER_BYTES];
+
+        self.read_register(Register::Config, &mut buf)?;
+
+        Ok(ConfigReg::from_bytes(buf))
+    }
+
+    pub fn write_config(&mut self, config: ConfigReg) -> Result<(), Error<E>> {
+        self.write_register(Register::Config, &config.into_bytes())
     }
 }
 
