@@ -210,7 +210,9 @@ where
     /// Write the raw GAINCAL register value.
     ///
     /// This is a signed 24-bit calibration value and
-    /// does not directly
+    /// does not directly represent a gain percentage.
+    /// See the MCP3911 datasheet calibration section
+    /// for details on computing calibration words.
     pub fn write_gain_calibration(&mut self, channel: Channel, value: i32) -> Result<(), Error<E>> {
         if !validate_i24(value) {
             return Err(Error::ValueOutOfRange);

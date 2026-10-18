@@ -102,6 +102,21 @@ pub enum Oversampling {
     O4096 = 7,
 }
 
+impl Oversampling {
+    pub const fn ratio(self) -> u32 {
+        match self {
+            Self::O32 => 32,
+            Self::O64 => 64,
+            Self::O128 => 128,
+            Self::O256 => 256,
+            Self::O512 => 512,
+            Self::O1024 => 1024,
+            Self::O2048 => 2048,
+            Self::O4096 => 4096,
+        }
+    }
+}
+
 #[derive(Specifier, Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
 #[bits = 2]
@@ -112,12 +127,44 @@ pub enum Prescale {
     Mclk8 = 3,
 }
 
+impl Prescale {
+    pub const fn divisor(self) -> u32 {
+        match self {
+            Self::Mclk1 => 1,
+            Self::Mclk2 => 2,
+            Self::Mclk4 => 4,
+            Self::Mclk8 => 8,
+        }
+    }
+}
+
 #[bitfield]
 #[derive(Copy, Clone, Debug)]
 pub struct ConfGain {
     pub ch0: Gain,
     pub ch1: Gain,
     pub boost: Boost,
+}
+
+/// Analog master clock frequency.
+///
+/// AMCLK = MCLK / PRESCALE
+pub const fn amclk_hz(mclk_hz: u32, prescale: Prescale) -> u32 {
+    mclk_hz / prescale.divisor()
+}
+
+/// Digital master clock frequency.
+///
+/// DMCLK = AMCLK / 4
+pub const fn dmclk_hz(mclk_hz: u32, prescale: Prescale) -> u32 {
+    amclk_hz(mclk_hz, prescale) / 4
+}
+
+/// ADC output data rate.
+///
+/// DRCLK = MCLK / (4 × OSR × PRESCALE)
+pub const fn sample_rate_hz(mclk_hz: u32, osr: Oversampling, prescale: Prescale) -> u32 {
+    mclk_hz / (4 * osr.ratio() * prescale.divisor())
 }
 
 #[bitfield]
@@ -494,5 +541,59 @@ mod tests {
         let decoded = ConfigReg::from_bytes(reg.into_bytes());
 
         assert_eq!(decoded.az_on_hi_speed(), AutoZero::Enabled);
+    }
+
+    #[test]
+    fn prescale_divisors() {
+        assert_eq!(Prescale::Mclk1.divisor(), 1);
+        assert_eq!(Prescale::Mclk2.divisor(), 2);
+        assert_eq!(Prescale::Mclk4.divisor(), 4);
+        assert_eq!(Prescale::Mclk8.divisor(), 8);
+    }
+
+    #[test]
+    fn oversampling_ratios() {
+        assert_eq!(Oversampling::O32.ratio(), 32);
+        assert_eq!(Oversampling::O64.ratio(), 64);
+        assert_eq!(Oversampling::O128.ratio(), 128);
+        assert_eq!(Oversampling::O256.ratio(), 256);
+        assert_eq!(Oversampling::O512.ratio(), 512);
+        assert_eq!(Oversampling::O1024.ratio(), 1024);
+        assert_eq!(Oversampling::O2048.ratio(), 2048);
+        assert_eq!(Oversampling::O4096.ratio(), 4096);
+    }
+
+    #[test]
+    fn amclk_default() {
+        assert_eq!(amclk_hz(4_000_000, Prescale::Mclk1), 4_000_000);
+    }
+
+    #[test]
+    fn dmclk_default() {
+        assert_eq!(dmclk_hz(4_000_000, Prescale::Mclk1), 1_000_000);
+    }
+
+    #[test]
+    fn sample_rate_default_configuration() {
+        assert_eq!(
+            sample_rate_hz(4_000_000, Oversampling::O256, Prescale::Mclk1,),
+            3906
+        );
+    }
+
+    #[test]
+    fn sample_rate_highest_speed() {
+        assert_eq!(
+            sample_rate_hz(4_000_000, Oversampling::O32, Prescale::Mclk1,),
+            31_250
+        );
+    }
+
+    #[test]
+    fn sample_rate_highest_resolution() {
+        assert_eq!(
+            sample_rate_hz(4_000_000, Oversampling::O4096, Prescale::Mclk1,),
+            244
+        );
     }
 }
