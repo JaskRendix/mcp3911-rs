@@ -491,3 +491,27 @@ fn configure_with_dither() {
 
     assert_eq!(cfg.dither, registers::Dither::Medium);
 }
+
+#[test]
+fn gain_calibration_accepts_max_i24() {
+    assert_eq!(to_u24(8_388_607), [0x7F, 0xFF, 0xFF]);
+}
+
+#[test]
+fn gain_calibration_accepts_min_i24() {
+    assert_eq!(to_u24(-8_388_608), [0x80, 0x00, 0x00]);
+}
+
+#[test]
+fn gain_calibration_rejects_out_of_range() {
+    use embedded_hal_mock::eh1::spi::Mock;
+
+    let spi = Mock::new(&[]);
+    let mut adc = MCP3911::new(spi, 1200);
+
+    let result = adc.write_gain_calibration(Channel::Ch0, 8_388_608);
+
+    assert!(matches!(result, Err(crate::Error::ValueOutOfRange)));
+
+    adc.release().done();
+}

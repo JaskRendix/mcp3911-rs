@@ -18,11 +18,14 @@ const READ_BIT: u8 = 0x01;
 /// FS = 1.5 × 8,388,608 = 12,582,912 counts.
 const MCP3911_FULL_SCALE_COUNTS: i64 = 12_582_912;
 
+const MIN_I24: i32 = -8_388_608;
+const MAX_I24: i32 = 8_388_607;
+
 /// Comprehensive driver error type
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Error<SpiError> {
     Spi(SpiError),
-    InvalidValue,
+    ValueOutOfRange,
 }
 
 /// Standalone helper for 24-bit two's complement sign extension
@@ -45,6 +48,11 @@ fn decode_i24(buf: &[u8; CHANNEL_REGISTER_BYTES]) -> i32 {
     let raw = ((buf[0] as u32) << 16) | ((buf[1] as u32) << 8) | (buf[2] as u32);
 
     sign_extend24(raw)
+}
+
+#[inline]
+fn validate_i24(value: i32) -> bool {
+    (MIN_I24..=MAX_I24).contains(&value)
 }
 
 /// Converts a raw ADC code to microvolts.
@@ -124,17 +132,7 @@ where
     pub fn configure(&mut self, config: Config) -> Result<(), Error<E>> {
         self.set_gain_and_boost(config.gain_ch0, config.gain_ch1, config.boost)?;
 
-        let mut buf = [0u8; CONFIG_REGISTER_BYTES];
-
-        self.read_register(Register::Config, &mut buf)?;
-
-        let mut reg = ConfigReg::from_bytes(buf);
-
-        reg.set_osr(config.osr);
-        reg.set_prescale(config.prescale);
-        reg.set_dither(config.dither);
-
-        self.write_register(Register::Config, &reg.into_bytes())
+        self.set_config_fields(config.osr, config.prescale, config.dither)
     }
 
     pub fn set_gain_and_boost(
@@ -214,6 +212,10 @@ where
     /// This is a signed 24-bit calibration value and
     /// does not directly
     pub fn write_gain_calibration(&mut self, channel: Channel, value: i32) -> Result<(), Error<E>> {
+        if !validate_i24(value) {
+            return Err(Error::ValueOutOfRange);
+        }
+
         self.write_i24_register(channel.gaincal_register(), value)
     }
 
@@ -233,6 +235,10 @@ where
         channel: Channel,
         value: i32,
     ) -> Result<(), Error<E>> {
+        if !validate_i24(value) {
+            return Err(Error::ValueOutOfRange);
+        }
+
         self.write_i24_register(channel.offcal_register(), value)
     }
 
@@ -296,7 +302,7 @@ where
     /// used as a software reset for both ADCs.
     pub fn write_phase(&mut self, phase: i16) -> Result<(), Error<E>> {
         if !(-2048..=2047).contains(&phase) {
-            return Err(Error::InvalidValue);
+            return Err(Error::ValueOutOfRange);
         }
 
         let raw = (phase as u16) & 0x0FFF;
